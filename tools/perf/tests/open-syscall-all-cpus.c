@@ -30,7 +30,7 @@ int test__open_syscall_event_on_all_cpus(void)
 	evsel = perf_evsel__newtp("syscalls", "sys_enter_open");
 	if (evsel == NULL) {
 		if (tracefs_configured())
-			pr_debug("is tracefs mounted on /sys/kernel/debug?\n");
+			pr_debug("is tracefs mounted on /sys/kernel/tracing?\n");
 		else if (debugfs_configured())
 			pr_debug("is debugfs mounted on /sys/kernel/debug?\n");
 		else
