@@ -61,7 +61,6 @@ struct hist_field {
 	char				*system;
 	char				*event_name;
 	char				*name;
-	unsigned int			var_idx;
 	unsigned int			var_ref_idx;
 	bool                            read_once;
 };
@@ -419,7 +418,6 @@ struct action_data {
 			 * tracked e.g onmax($var).
 			 */
 			struct hist_field	*var_ref;
-			unsigned int		var_ref_idx;
 
 			/*
 			 * track_var contains the 'invisible' tracking
@@ -3637,7 +3635,7 @@ static void ontrack_action(struct hist_trigger_data *hist_data,
 			   struct ring_buffer_event *rbe,
 			   struct action_data *data, u64 *var_ref_vals)
 {
-	u64 var_val = var_ref_vals[data->track_data.var_ref_idx];
+	u64 var_val = var_ref_vals[data->track_data.var_ref->var_ref_idx];
 
 	if (check_track_val(elt, data, var_val)) {
 		save_track_val(hist_data, elt, data, var_val);
@@ -3694,7 +3692,6 @@ static int track_data_create(struct hist_trigger_data *hist_data,
 {
 	struct hist_field *var_field, *ref_field, *track_var = NULL;
 	struct trace_event_file *file = hist_data->event_file;
-	unsigned int var_ref_idx = hist_data->n_var_refs;
 	char *track_data_var_str;
 	unsigned long flags;
 	int ret = 0;
@@ -3725,8 +3722,6 @@ static int track_data_create(struct hist_trigger_data *hist_data,
 	hist_data->var_refs[hist_data->n_var_refs] = ref_field;
 	ref_field->var_ref_idx = hist_data->n_var_refs++;
 	data->track_data.var_ref = ref_field;
-
-	data->track_data.var_ref_idx = var_ref_idx;
 
 	if (data->handler == HANDLER_ONMAX)
 		track_var = create_var(hist_data, file, "__max", sizeof(u64), "u64");
