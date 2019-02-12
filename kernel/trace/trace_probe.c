@@ -13,6 +13,22 @@
 
 #include "trace_probe.h"
 
+#define ERRORS								\
+	C(NONE,			"No error"),				\
+	C(INVALID_STRING_SPEC,	"string only accepts memory or address."), \
+	C(ARG_TOO_LONG,		"Argument is too long."),		\
+	C(INVALID_ARG_NAME,	"Invalid argument name"),
+
+#undef C
+#define C(a, b)		KPROBE_ERR_##a
+
+enum { ERRORS };
+
+#undef C
+#define C(a, b)		b
+
+static const char *err_text[] = { ERRORS };
+
 const char *reserved_field_names[] = {
 	"common_type",
 	"common_flags",
@@ -384,7 +400,7 @@ static int traceprobe_parse_probe_arg_body(char *arg, ssize_t *size,
 	int ret, len;
 
 	if (strlen(arg) > MAX_ARGSTR_LEN) {
-		pr_info("Argument is too long.: %s\n",  arg);
+		tracing_log_err("kprobe_events", "replace this with command", err_text, KPROBE_ERR_ARG_TOO_LONG, err_pos("command", arg));
 		return -ENOSPC;
 	}
 	parg->comm = kstrdup(arg, GFP_KERNEL);
@@ -443,7 +459,8 @@ static int traceprobe_parse_probe_arg_body(char *arg, ssize_t *size,
 	if (!strcmp(parg->type->name, "string")) {
 		if (code->op != FETCH_OP_DEREF && code->op != FETCH_OP_IMM &&
 		    code->op != FETCH_OP_COMM) {
-			pr_info("string only accepts memory or address.\n");
+			tracing_log_err("kprobe_events", "replace this with command", err_text, KPROBE_ERR_INVALID_STRING_SPEC, 0);
+
 			ret = -EINVAL;
 			goto fail;
 		}
@@ -558,8 +575,7 @@ int traceprobe_parse_probe_arg(struct trace_probe *tp, int i, char *arg,
 		return -ENOMEM;
 
 	if (!is_good_name(parg->name)) {
-		pr_info("Invalid argument[%d] name: %s\n",
-			i, parg->name);
+		tracing_log_err("kprobe_events", "replace this with command", err_text, KPROBE_ERR_INVALID_ARG_NAME, err_pos("cmd", parg->name));
 		return -EINVAL;
 	}
 
