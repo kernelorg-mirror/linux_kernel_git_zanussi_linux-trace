@@ -11,7 +11,7 @@ pos=$(echo -n "${1%^*}" | wc -c) # error position
 command=$(echo "$1" | tr -d ^)
 echo "Test command: $command"
 echo > error_log
-(! echo "$command" > kprobe_events ) >& /dev/null
+(! echo "$command" > kprobe_events ) 2> /dev/null
 grep "trace_kprobe: error:" -A 3 error_log
 N=$(tail -n 1 error_log | wc -c)
 # "  Command: " and "^\n" => 13
