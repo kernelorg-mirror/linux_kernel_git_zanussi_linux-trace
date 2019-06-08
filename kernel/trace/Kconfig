@@ -772,6 +772,22 @@ config PREEMPTIRQ_DELAY_TEST
 
 	  If unsure, say N
 
+config TRACE_EVENTS_LIVE_TEST
+	tristate "Test module for live event tracing"
+	depends on HIST_TRIGGERS
+	help
+          This option creates a test module to check the base
+          functionality of live event tracing.
+
+          To test, insert the module and then at any later time run
+	  the live event tracing daemon, which should display a live
+	  histogram ala top.
+
+	  Alternatively, kernelshark can be used as the userspace end
+	  of the test - invoke using 'kernelshark --test-livehist'.
+
+	  If unsure, say N.
+
 config TRACE_EVAL_MAP_FILE
        bool "Show eval mappings for trace events"
        depends on TRACING
