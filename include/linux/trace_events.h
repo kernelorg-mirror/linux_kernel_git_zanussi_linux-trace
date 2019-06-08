@@ -550,6 +550,88 @@ extern int trace_event_get_offsets(struct trace_event_call *call);
 
 int trace_set_clr_event(const char *system, const char *event, int set);
 
+struct dyn_event;
+
+/**
+ * struct dyn_event_operations - Methods for each type of dynamic events
+ *
+ * These methods must be set for each type, since there is no default method.
+ * Before using this for dyn_event_init(), it must be registered by
+ * dyn_event_register().
+ *
+ * @create: Parse and create event method. This is invoked when user passes
+ *  a event definition to dynamic_events interface. This must not destruct
+ *  the arguments and return -ECANCELED if given arguments doesn't match its
+ *  command prefix.
+ * @show: Showing method. This is invoked when user reads the event definitions
+ *  via dynamic_events interface.
+ * @is_busy: Check whether given event is busy so that it can not be deleted.
+ *  Return true if it is busy, otherwides false.
+ * @free: Delete the given event. Return 0 if success, otherwides error.
+ * @match: Check whether given event and system name match this event.
+ *  Return true if it matches, otherwides false.
+ *
+ * Except for @create, these methods are called under holding event_mutex.
+ */
+struct dyn_event_operations {
+	struct list_head	list;
+	int (*create)(int argc, const char *argv[]);
+	int (*show)(struct seq_file *m, struct dyn_event *ev);
+	bool (*is_busy)(struct dyn_event *ev);
+	int (*free)(struct dyn_event *ev);
+	bool (*match)(const char *system, const char *event,
+			struct dyn_event *ev);
+};
+
+/**
+ * struct dyn_event - Dynamic event list header
+ *
+ * The dyn_event structure encapsulates a list and a pointer to the operators
+ * for making a global list of dynamic events.
+ * User must includes this in each event structure, so that those events can
+ * be added/removed via dynamic_events interface.
+ */
+struct dyn_event {
+	struct list_head		list;
+	struct dyn_event_operations	*ops;
+};
+
+struct synth_field {
+	char *type;
+	char *name;
+	size_t size;
+	bool is_signed;
+	bool is_string;
+};
+
+struct synth_event {
+	struct dyn_event			devent;
+	int					ref;
+	char					*name;
+	struct synth_field			**fields;
+	unsigned int				n_fields;
+	unsigned int				n_u64;
+	struct trace_event_class		class;
+	struct trace_event_call			call;
+	struct tracepoint			*tp;
+};
+
+struct synth_trace_event {
+	struct trace_entry	ent;
+	u64			fields[];
+};
+
+#define SYNTH_FIELDS_MAX	16
+
+#define STR_VAR_LEN_MAX		32 /* must be multiple of sizeof(u64) */
+
+extern struct synth_event *create_empty_synth_event(const char *name);
+extern int finalize_synth_event(struct synth_event *event);
+extern int add_synth_field(struct synth_event *event, const char *field_type,
+			   const char *field_name);
+extern void free_synth_event(struct synth_event *event);
+extern int delete_synth_event(const char *name);
+
 /*
  * The double __builtin_constant_p is because gcc will give us an error
  * if we try to allocate the static variable to fmt if it is not a

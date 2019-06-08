@@ -18,9 +18,6 @@
 #include "trace_dynevent.h"
 
 #define SYNTH_SYSTEM		"synthetic"
-#define SYNTH_FIELDS_MAX	16
-
-#define STR_VAR_LEN_MAX		32 /* must be multiple of sizeof(u64) */
 
 #define ERRORS								\
 	C(NONE,			"No error"),				\
@@ -376,32 +373,12 @@ static bool synth_event_is_busy(struct dyn_event *ev);
 static bool synth_event_match(const char *system, const char *event,
 			      struct dyn_event *ev);
 
-static struct dyn_event_operations synth_event_ops = {
+struct dyn_event_operations synth_event_ops = {
 	.create = synth_event_create,
 	.show = synth_event_show,
 	.is_busy = synth_event_is_busy,
 	.free = synth_event_release,
 	.match = synth_event_match,
-};
-
-struct synth_field {
-	char *type;
-	char *name;
-	size_t size;
-	bool is_signed;
-	bool is_string;
-};
-
-struct synth_event {
-	struct dyn_event			devent;
-	int					ref;
-	char					*name;
-	struct synth_field			**fields;
-	unsigned int				n_fields;
-	unsigned int				n_u64;
-	struct trace_event_class		class;
-	struct trace_event_call			call;
-	struct tracepoint			*tp;
 };
 
 static bool is_synth_event(struct dyn_event *ev)
@@ -631,11 +608,6 @@ static void hist_err_clear(void)
 	last_cmd_loc[0] = '\0';
 }
 
-struct synth_trace_event {
-	struct trace_entry	ent;
-	u64			fields[];
-};
-
 static int synth_event_define_fields(struct trace_event_call *call)
 {
 	struct synth_trace_event trace;
@@ -670,7 +642,7 @@ static int synth_event_define_fields(struct trace_event_call *call)
 	return ret;
 }
 
-static bool synth_field_signed(char *type)
+bool synth_field_signed(char *type)
 {
 	if (str_has_prefix(type, "u"))
 		return false;
@@ -678,7 +650,7 @@ static bool synth_field_signed(char *type)
 	return true;
 }
 
-static int synth_field_is_string(char *type)
+int synth_field_is_string(char *type)
 {
 	if (strstr(type, "char[") != NULL)
 		return true;
@@ -718,7 +690,7 @@ static int synth_field_string_size(char *type)
 	return size;
 }
 
-static int synth_field_size(char *type)
+int synth_field_size(char *type)
 {
 	int size = 0;
 
@@ -957,7 +929,7 @@ static int set_synth_event_print_fmt(struct trace_event_call *call)
 	return 0;
 }
 
-static void free_synth_field(struct synth_field *field)
+void free_synth_field(struct synth_field *field)
 {
 	kfree(field->type);
 	kfree(field->name);
@@ -1097,7 +1069,7 @@ static inline void trace_synth(struct synth_event *event, u64 *var_ref_vals,
 	}
 }
 
-static struct synth_event *find_synth_event(const char *name)
+struct synth_event *find_synth_event(const char *name)
 {
 	struct dyn_event *pos;
 	struct synth_event *event;
@@ -1113,7 +1085,7 @@ static struct synth_event *find_synth_event(const char *name)
 	return NULL;
 }
 
-static int register_synth_event(struct synth_event *event)
+int register_synth_event(struct synth_event *event)
 {
 	struct trace_event_call *call = &event->call;
 	int ret = 0;
@@ -1176,7 +1148,7 @@ static int unregister_synth_event(struct synth_event *event)
 	return ret;
 }
 
-static void free_synth_event(struct synth_event *event)
+void free_synth_event(struct synth_event *event)
 {
 	unsigned int i;
 
@@ -1193,6 +1165,7 @@ static void free_synth_event(struct synth_event *event)
 	free_synth_event_print_fmt(&event->call);
 	kfree(event);
 }
+EXPORT_SYMBOL_GPL(free_synth_event);
 
 static struct synth_event *alloc_synth_event(const char *name, int n_fields,
 					     struct synth_field **fields)
@@ -1313,29 +1286,41 @@ static int __create_synth_event(int argc, const char *name, const char **argv)
 	goto out;
 }
 
+int delete_synth_event(const char *name)
+{
+	struct synth_event *event = NULL;
+	int ret = 0;
+
+	mutex_lock(&event_mutex);
+
+	event = find_synth_event(name);
+	if (event) {
+		if (event->ref)
+			ret = -EBUSY;
+		else {
+			ret = unregister_synth_event(event);
+			if (!ret) {
+				dyn_event_remove(&event->devent);
+				free_synth_event(event);
+			}
+		}
+	} else
+		ret = -ENOENT;
+
+	mutex_unlock(&event_mutex);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(delete_synth_event);
+
 static int create_or_delete_synth_event(int argc, char **argv)
 {
 	const char *name = argv[0];
-	struct synth_event *event = NULL;
 	int ret;
 
 	/* trace_run_command() ensures argc != 0 */
 	if (name[0] == '!') {
-		mutex_lock(&event_mutex);
-		event = find_synth_event(name + 1);
-		if (event) {
-			if (event->ref)
-				ret = -EBUSY;
-			else {
-				ret = unregister_synth_event(event);
-				if (!ret) {
-					dyn_event_remove(&event->devent);
-					free_synth_event(event);
-				}
-			}
-		} else
-			ret = -ENOENT;
-		mutex_unlock(&event_mutex);
+		ret = delete_synth_event(name + 1);
 		return ret;
 	}
 

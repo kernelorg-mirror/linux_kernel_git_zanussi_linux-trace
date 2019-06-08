@@ -1662,6 +1662,14 @@ extern int register_event_command(struct event_command *cmd);
 extern int unregister_event_command(struct event_command *cmd);
 extern int register_trigger_hist_enable_disable_cmds(void);
 
+extern struct dyn_event_operations synth_event_ops;
+extern struct synth_event *find_synth_event(const char *name);
+extern int register_synth_event(struct synth_event *event);
+extern bool synth_field_signed(char *type);
+extern int synth_field_is_string(char *type);
+extern int synth_field_size(char *type);
+extern void free_synth_field(struct synth_field *field);
+
 /**
  * struct event_trigger_ops - callbacks for trace event triggers
  *
