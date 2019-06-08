@@ -662,6 +662,22 @@ config HIST_TRIGGERS
 	  See Documentation/trace/histogram.rst.
 	  If in doubt, say N.
 
+config TRACE_EVENTS_LIVE
+	bool "Live Event Tracing support"
+	depends on HIST_TRIGGERS
+	default n
+	help
+          Adds support for 'live' tracing events, which are events and
+	  infrastructure designed to support 'live' tracing GUIs
+	  spanning data from one or many machines.
+
+	  In order to make use of this feature, you'll need a GUI that
+	  supports it.  See
+	  https://kernel.org/pub/linux/kernel/people/zanussi/live for
+	  details.
+
+          If in doubt, say N.
+
 config MMIOTRACE_TEST
 	tristate "Test module for mmiotrace"
 	depends on MMIOTRACE && m

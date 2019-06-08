@@ -1650,6 +1650,12 @@ extern int synth_field_is_string(char *type);
 extern int synth_field_size(char *type);
 extern void free_synth_field(struct synth_field *field);
 
+#define ETT_USER	128
+
+typedef void (*trigger_fn_t) (struct event_trigger_data *data,
+			      void *rec,
+			      struct ring_buffer_event *rbe);
+
 extern struct trace_event_file *event_file(struct trace_array *tr,
 					   char *system, char *event_name);
 extern struct list_head *trace_get_fields(struct trace_event_call *event_call);

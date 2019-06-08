@@ -618,6 +618,9 @@ struct synth_event {
 	struct tracepoint			*tp;
 };
 
+extern int generate_synth_event(struct trace_event_file *file, u64 *vals,
+				unsigned int n_vals);
+
 struct synth_trace_event {
 	struct trace_entry	ent;
 	u64			fields[];
@@ -639,6 +642,56 @@ extern struct trace_event_file *find_event_file(struct trace_array *tr,
 						const char *event);
 
 extern struct trace_array *top_trace_array(void);
+
+extern void *create_live_handler(char *subsys_name,
+				 char *event_name,
+				 void *trigger_ops);
+
+extern void destroy_live_handler(char *subsys_name,
+				 char *event_name,
+				 void *data);
+
+void destroy_trigger_data(void *trigger_data);
+
+struct live_event {
+	struct trace_event_file *file;
+	struct ftrace_event_field *field;
+};
+
+#define MAX_ACCESSORS	16
+
+typedef u64 (*live_field_fn_t) (struct ftrace_event_field *field,
+				struct ring_buffer_event *rbe,
+				void *event);
+
+struct live_field {
+	struct ftrace_event_field	*field;
+	live_field_fn_t			fn;
+};
+
+struct live_accessors {
+	unsigned int		n;
+	struct live_field	*accessors[MAX_ACCESSORS];
+	struct live_field	*timestamp_accessor;
+	struct trace_event_file *file;
+};
+
+extern int
+add_live_field_accessor(struct live_accessors *live_accessors,
+			char *field_name);
+extern void
+destroy_live_field_accessors(struct live_accessors *live_accessors);
+
+extern struct live_field *
+find_live_field_accessor(struct live_accessors *live_accessors,
+			 char *field_name);
+
+extern struct live_accessors *
+__create_live_field_accessors(char *subsys_name, char *event_name);
+
+extern struct live_accessors *
+create_live_field_accessors(char *subsys_name, char *event_name);
+
 /*
  * The double __builtin_constant_p is because gcc will give us an error
  * if we try to allocate the static variable to fmt if it is not a
