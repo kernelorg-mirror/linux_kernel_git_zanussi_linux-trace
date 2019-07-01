@@ -110,6 +110,8 @@ enum trace_iter_flags {
 	TRACE_FILE_TIME_IN_NS	= 4,
 };
 
+extern struct list_head *trace_get_generic_fields(void);
+extern struct list_head *trace_get_common_fields(void);
 
 typedef enum print_line_t (*trace_print_func)(struct trace_iterator *iter,
 				      int flags, struct trace_event *event);
@@ -632,6 +634,11 @@ extern int add_synth_field(struct synth_event *event, const char *field_type,
 extern void free_synth_event(struct synth_event *event);
 extern int delete_synth_event(const char *name);
 
+extern struct trace_event_file *find_event_file(struct trace_array *tr,
+						const char *system,
+						const char *event);
+
+extern struct trace_array *top_trace_array(void);
 /*
  * The double __builtin_constant_p is because gcc will give us an error
  * if we try to allocate the static variable to fmt if it is not a

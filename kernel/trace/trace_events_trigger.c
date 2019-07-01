@@ -523,9 +523,9 @@ void update_cond_flag(struct trace_event_file *file)
  *
  * Return: 0 on success, errno otherwise
  */
-static int register_trigger(char *glob, struct event_trigger_ops *ops,
-			    struct event_trigger_data *data,
-			    struct trace_event_file *file)
+int register_trigger(char *glob, struct event_trigger_ops *ops,
+		     struct event_trigger_data *data,
+		     struct trace_event_file *file)
 {
 	struct event_trigger_data *test;
 	int ret = 0;
@@ -568,9 +568,9 @@ out:
  * Usually used directly as the @unreg method in event command
  * implementations.
  */
-static void unregister_trigger(char *glob, struct event_trigger_ops *ops,
-			       struct event_trigger_data *test,
-			       struct trace_event_file *file)
+void unregister_trigger(char *glob, struct event_trigger_ops *ops,
+			struct event_trigger_data *test,
+			struct trace_event_file *file)
 {
 	struct event_trigger_data *data;
 	bool unregistered = false;

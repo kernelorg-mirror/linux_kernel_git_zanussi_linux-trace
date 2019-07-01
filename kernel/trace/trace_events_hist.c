@@ -3118,8 +3118,8 @@ find_compatible_hist(struct hist_trigger_data *target_hist_data,
 	return NULL;
 }
 
-static struct trace_event_file *event_file(struct trace_array *tr,
-					   char *system, char *event_name)
+struct trace_event_file *event_file(struct trace_array *tr,
+				    char *system, char *event_name)
 {
 	struct trace_event_file *file;
 

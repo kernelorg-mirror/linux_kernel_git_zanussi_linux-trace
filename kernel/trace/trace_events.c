@@ -70,6 +70,18 @@ static int system_refcount_dec(struct event_subsystem *system)
 #define while_for_each_event_file()		\
 	}
 
+struct list_head *trace_get_common_fields(void)
+{
+	return &ftrace_common_fields;
+}
+EXPORT_SYMBOL_GPL(trace_get_common_fields);
+
+struct list_head *trace_get_generic_fields(void)
+{
+	return &ftrace_generic_fields;
+}
+EXPORT_SYMBOL_GPL(trace_get_generic_fields);
+
 static struct ftrace_event_field *
 __find_event_field(struct list_head *head, char *name)
 {
@@ -2502,6 +2514,7 @@ find_event_file(struct trace_array *tr, const char *system, const char *event)
 
 	return file;
 }
+EXPORT_SYMBOL_GPL(find_event_file);
 
 #ifdef CONFIG_DYNAMIC_FTRACE
 

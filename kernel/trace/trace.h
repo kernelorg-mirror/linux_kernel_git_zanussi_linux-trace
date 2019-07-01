@@ -344,23 +344,6 @@ extern int tracing_set_clock(struct trace_array *tr, const char *clockstr);
 
 extern bool trace_clock_in_ns(struct trace_array *tr);
 
-/*
- * The global tracer (top) should be the first trace array added,
- * but we check the flag anyway.
- */
-static inline struct trace_array *top_trace_array(void)
-{
-	struct trace_array *tr;
-
-	if (list_empty(&ftrace_trace_arrays))
-		return NULL;
-
-	tr = list_entry(ftrace_trace_arrays.prev,
-			typeof(*tr), list);
-	WARN_ON(!(tr->flags & TRACE_ARRAY_FL_GLOBAL));
-	return tr;
-}
-
 #define FTRACE_CMP_TYPE(var, type) \
 	__builtin_types_compatible_p(typeof(var), type *)
 
@@ -1568,9 +1551,6 @@ extern int event_trace_del_tracer(struct trace_array *tr);
 extern struct trace_event_file *__find_event_file(struct trace_array *tr,
 						  const char *system,
 						  const char *event);
-extern struct trace_event_file *find_event_file(struct trace_array *tr,
-						const char *system,
-						const char *event);
 
 static inline void *event_file_data(struct file *filp)
 {
@@ -1669,6 +1649,18 @@ extern bool synth_field_signed(char *type);
 extern int synth_field_is_string(char *type);
 extern int synth_field_size(char *type);
 extern void free_synth_field(struct synth_field *field);
+
+extern struct trace_event_file *event_file(struct trace_array *tr,
+					   char *system, char *event_name);
+extern struct list_head *trace_get_fields(struct trace_event_call *event_call);
+extern struct list_head *trace_get_generic_fields(void);
+extern struct list_head *trace_get_common_fields(void);
+extern int register_trigger(char *glob, struct event_trigger_ops *ops,
+			    struct event_trigger_data *data,
+			    struct trace_event_file *file);
+extern void unregister_trigger(char *glob, struct event_trigger_ops *ops,
+			       struct event_trigger_data *test,
+			       struct trace_event_file *file);
 
 /**
  * struct event_trigger_ops - callbacks for trace event triggers

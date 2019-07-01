@@ -304,6 +304,24 @@ void trace_array_put(struct trace_array *this_tr)
 	mutex_unlock(&trace_types_lock);
 }
 
+/*
+ * The global tracer (top) should be the first trace array added,
+ * but we check the flag anyway.
+ */
+struct trace_array *top_trace_array(void)
+{
+	struct trace_array *tr;
+
+	if (list_empty(&ftrace_trace_arrays))
+		return NULL;
+
+	tr = list_entry(ftrace_trace_arrays.prev,
+			typeof(*tr), list);
+	WARN_ON(!(tr->flags & TRACE_ARRAY_FL_GLOBAL));
+	return tr;
+}
+EXPORT_SYMBOL_GPL(top_trace_array);
+
 int call_filter_check_discard(struct trace_event_call *call, void *rec,
 			      struct ring_buffer *buffer,
 			      struct ring_buffer_event *event)
