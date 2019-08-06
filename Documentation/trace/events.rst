@@ -525,3 +525,203 @@ The following commands are supported:
   event counts (hitcount).
 
   See Documentation/trace/histogram.rst for details and examples.
+
+6.3 In-kernel trace event API
+-----------------------------
+
+In most cases, the command-line interface to trace events is more than
+sufficient.  Sometimes, however, applications might find the need for
+more complex relationships than can be expressed through a simple
+series of linked command-line expressions, or putting together sets of
+commands may be simply too cumbersome.  An example might be an
+application that needs to 'listen' to the trace stream in order to
+maintain an in-kernel state machine detecting, for instance, when an
+illegal kernel state occurs in the scheduler.
+
+The trace event subsystem provides an in-kernel API allowing modules
+or other kernel code to access the trace stream in real-time, and
+simultaneously generate user-defined 'synthetic' events at will, which
+can be used to either augment the existing trace stream and/or signal
+that a particular important state has occured.
+
+The API provided for these purposes is describe below and allows the
+following:
+
+  - creating and defining custom handlers for existing trace events
+  - dynamically creating synthetic event definitions
+  - generating synthetic events from custom handlers
+
+6.3.1 Creating and defining custom handlers for existing trace events
+---------------------------------------------------------------------
+
+To create a live event handler for an existing event in a kernel
+module, the create_live_handler() function should be used.  The name
+of the event and its subsystem should be specified, along with an
+event_trigger_ops object.  The event_trigger_ops object specifies the
+name of the callback function that will be called on every hit of the
+named event.  For example, to have the 'sched_switch_event_trigger()'
+callback called on every sched_switch event, the following code could
+be used:
+
+  static struct event_trigger_ops event_live_trigger_ops = {
+      .func			= sched_switch_event_trigger,
+      .print			= event_live_trigger_print,
+      .init			= event_live_trigger_init,
+      .free			= event_live_trigger_free,
+  };
+
+  data = create_live_handler("sched", "sched_switch", &event_live_trigger_ops);
+
+In order to access the event's trace data on an event hit, field
+accessors can be used.  When the callback function is invoked, an
+array of live_field 'accessors' is passed in as the private_data of
+the event_trigger_data passed to the handler.  A given event field's
+data can be accessed via the live_field struct pointer corresponding
+to that field, specifically by calling the live_field->fn() member,
+which will return the field data as a u64 that can be cast into the
+actual field type (is_string_field() can be used to determine and deal
+with string field types).
+
+For example, the following code will print out each field value for
+various types:
+
+  for (i = 0; i < MAX_ACCESSORS; i++) {
+      field = live_accessors->accessors[i];
+      if (!field)
+          break;
+
+      val = field->fn(field->field, rbe, rec);
+
+      if (is_string_field(field->field))
+          printk("\tval=%s (%s)\n", (char *)(long)val, field->field->name);
+      else
+          printk("\tval=%llu (%s)\n", val, field->field->name);
+  }
+
+  val = prev_comm_field->fn(prev_comm_field->field, rbe, rec);
+  printk("prev_comm: %s\n", (char *)val);
+  val = prev_pid_field->fn(prev_pid_field->field, rbe, rec);
+  printk("prev_pid: %d\n", (pid_t)val);
+
+  print_timestamp(live_accessors->timestamp_accessor, rec, rbe);
+
+In order for this to work, a set of field accessors needs to be
+created before the event is registered.  This is best done in the
+event_trigger_ops.init() callback, which is called from the
+create_live_handler() code.
+
+create_live_field_accessors() automatically creates and add a live
+field accessor for each field in a trace event.
+
+Each field will have an accessor created for it and added to the
+live_accessors array for the event.  This includes the common event
+fields, but doesn't include the common_timestamp (which can be added
+manually using add_live_field_accessor() if needed).
+
+If you don't need or want accessors for every field, you can add them
+individually using add_live_field_accessor() for each one.
+
+A given field's accessor, for use in the handler, can be retrieved
+using find_live_field_accessor() with the field's name.
+
+For example, this call would create a set of live field accessors, one
+for each field of the sched_switch event:
+
+  live_accessors = create_live_field_accessors("sched", "sched_switch");
+
+To access a couple specific sched_switch fields (the same fields we
+used above in the handler):
+
+  prev_pid_field = find_live_field_accessor(live_accessors, "prev_pid");
+  prev_comm_field = find_live_field_accessor(live_accessors, "prev_comm");
+
+To add a common_timestamp accessor, use this call:
+
+  ret = add_live_field_accessor(live_accessors, "common_timestamp");
+
+Note that the common_timestamp accessor is special and unlike all
+other accessors, can be accessed using the dedicated
+live_accessors->timestamp_accessor member.
+
+6.3.2 Dyamically creating synthetic event definitions
+-----------------------------------------------------
+
+To create a new synthetic event from a kernel module, an empty
+synthetic event should first be created using
+create_empty_synthetic_event().  The name of the event should be
+supplied to this function.  For example, to create a new "livetest"
+synthetic event:
+
+  struct synth_event *se = create_empty_synth_event("livetest");
+
+Once a synthetic event object has been created, it can then be
+populated with fields.  Fields are added one by one using
+add_synth_field(), supplying the new synthetic event object, a field
+type, and a field name.  For example, to add a new int field named
+"intfield", the following call should be made:
+
+  ret = add_synth_field(se, "int", "intfield");
+
+See synth_field_size() for available types. If field_name contains [n]
+the field is considered to be an array.
+
+Once all the fields have been added, the event should be finalized and
+registered by calling the finalize_synth_event() function:
+
+  ret = finalize_synth_event(se);
+
+At this point, the event object is ready to be used for generating new
+events.
+
+6.3.3 Generating synthetic events from custom handlers
+------------------------------------------------------
+
+To generate a synthetic event, the generate_synth_event() function is
+used.  It's passed the trace_event_file representing the synthetic
+event (which can be retrieved using find_event_file() using the
+synthetic event name and "synthetic" as the system name, along with
+top_trace_array() as the trace array), along with an array of u64, one
+for each synthetic event field.
+
+The 'vals' array is just an array of u64, the number of which must
+match the number of field in the synthetic event, and which must be in
+the same order as the synthetic event fields.
+
+All vals should be cast to u64, and string vals are just pointers to
+strings, cast to u64.  Strings will be copied into space reserved in
+the event for the string, using these pointers.
+
+So for a synthetic event that was created using the following:
+
+  se = create_empty_synth_event("schedtest");
+  add_synth_field(se, "pid_t", "next_pid_field");
+  add_synth_field(se, "char[16]", "next_comm_field");
+  add_synth_field(se, "u64", "ts_ns");
+  add_synth_field(se, "u64", "ts_ms");
+  add_synth_field(se, "unsigned int", "cpu");
+  add_synth_field(se, "char[64]", "my_string_field");
+  add_synth_field(se, "int", "my_int_field");
+  finalize_synth_event(se);
+
+  schedtest_event_file = find_event_file(top_trace_array(),
+                                         "synthetic", "schedtest");
+
+Code to generate a synthetic event might then look like this:
+
+  u64 vals[7];
+
+  ts_ns = get_timestamp(live_accessors->timestamp_accessor, rec, rbe, true);
+  ts_ms = get_timestamp(live_accessors->timestamp_accessor, rec, rbe, false);
+  cpu = smp_processor_id();
+  next_comm_val = next_comm_field->fn(next_comm_field->field, rbe, rec);
+  next_pid_val = next_pid_field->fn(next_pid_field->field, rbe, rec);
+
+  vals[0] = next_pid_val;
+  vals[1] = next_comm_val;
+  vals[2] = ts_ns;
+  vals[3] = ts_ms;
+  vals[4] = cpu;
+  vals[5] = (u64)"thneed";
+  vals[6] = 398;
+
+  generate_synth_event(schedtest_event_file, vals, sizeof(vals));
