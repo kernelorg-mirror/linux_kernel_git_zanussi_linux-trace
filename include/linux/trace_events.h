@@ -365,6 +365,18 @@ struct synth_field_desc {
 
 struct synth_event;
 
+struct synth_gen_state {
+	struct trace_event_buffer fbuffer;
+	struct synth_trace_event *entry;
+	struct ring_buffer *buffer;
+	struct synth_event *event;
+	unsigned int cur_field;
+	unsigned int n_u64;
+	bool enabled;
+	bool add_next;
+	bool add_name;
+};
+
 extern int create_synth_event(const char *name,
 			      struct synth_field_desc *fields,
 			      unsigned int n_fields,
@@ -380,6 +392,14 @@ extern int add_synth_fields(struct synth_event *event,
 			    struct synth_field_desc *fields,
 			    unsigned int n_fields);
 extern int finalize_synth_event(struct synth_event *event);
+extern int generate_synth_event(struct trace_event_file *file, u64 *vals,
+				unsigned int n_vals);
+extern int generate_synth_event_start(struct trace_event_file *file,
+				      struct synth_gen_state *gen_state);
+extern int add_next_synth_val(u64 val, struct synth_gen_state *gen_state);
+extern int add_synth_val(const char *field_name, u64 val,
+			 struct synth_gen_state *gen_state);
+extern int generate_synth_event_end(struct synth_gen_state *gen_state);
 
 /*
  * Event file flags:
