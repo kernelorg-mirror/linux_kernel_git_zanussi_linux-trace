@@ -2535,6 +2535,136 @@ find_event_file(struct trace_array *tr, const char *system, const char *event)
 	return file;
 }
 
+static struct trace_event_file *__get_event_file(const char *instance,
+						 const char *system,
+						 const char *event,
+						 bool lock)
+{
+	struct trace_array *tr = top_trace_array();
+	struct trace_event_file *file = NULL;
+	int ret = -EINVAL;
+
+	if (instance) {
+		tr = trace_array_find(instance);
+		if (!tr)
+			return ERR_PTR(ret);
+	}
+
+	ret = trace_array_get(tr);
+	if (ret)
+		return ERR_PTR(ret);
+
+	if (lock)
+		mutex_lock(&event_mutex);
+
+	file = find_event_file(tr, system, event);
+	if (!file) {
+		trace_array_put(tr);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* Don't let event modules unload while in use */
+	ret = try_module_get(file->event_call->mod);
+	if (!ret) {
+		trace_array_put(tr);
+		ret = -EBUSY;
+		goto out;
+	}
+
+	ret = 0;
+ out:
+	if (lock)
+		mutex_unlock(&event_mutex);
+
+	if (ret)
+		file = ERR_PTR(ret);
+
+	return file;
+}
+
+/**
+ * get_event_file - Find and return a trace event file
+ * @instance: The name of the trace instance containing the event
+ * @system: The name of the system containing the event
+ * @event: The name of the event
+ *
+ * Return a trace event file given the trace instance name, trace
+ * system, and trace event name.  If the instance name is NULL, it
+ * refers to the top-level trace array.
+ *
+ * This function will look it up and return it if found, after calling
+ * trace_array_get() to prevent the instance from going away, and
+ * increment the event's module refcount to prevent it from being
+ * removed.
+ *
+ * To release the file, call put_event_file(), which will call
+ * trace_array_put() and decrement the event's module refcount.
+ *
+ * Return: The trace event on success, ERR_PTR otherwise.
+ */
+struct trace_event_file *get_event_file(const char *instance,
+					const char *system,
+					const char *event)
+{
+	return __get_event_file(instance, system, event, true);
+}
+EXPORT_SYMBOL_GPL(get_event_file);
+
+/**
+ * get_event_file_nolock - non-locking version of get_event_file
+ *
+ * Same as get_event_file() but doesn't take event_mutex.  See
+ * get_event_file() for details.
+ */
+struct trace_event_file *get_event_file_nolock(const char *instance,
+					       const char *system,
+					       const char *event)
+{
+	return __get_event_file(instance, system, event, false);
+}
+EXPORT_SYMBOL_GPL(get_event_file_nolock);
+
+/**
+ * put_event_file - Release a file from get_event_file()
+ * @file: The trace event file
+ *
+ * If a file was retrieved using get_event_file(), this should be
+ * called when it's no longer needed.  It will cancel the previous
+ * trace_array_get() called by that function, and decrement the
+ * event's module refcount.
+ */
+void __put_event_file(struct trace_event_file *file, bool lock)
+{
+	trace_array_put(file->tr);
+
+	if (lock)
+		mutex_lock(&event_mutex);
+
+	module_put(file->event_call->mod);
+
+	if (lock)
+		mutex_unlock(&event_mutex);
+}
+
+void put_event_file(struct trace_event_file *file)
+{
+	return __put_event_file(file, true);
+}
+EXPORT_SYMBOL_GPL(put_event_file);
+
+/**
+ * put_event_file_nolock - non-locking version of put_event_file
+ *
+ * Same as put_event_file() but doesn't take event_mutex.  See
+ * put_event_file() for details.
+ */
+void put_event_file_nolock(struct trace_event_file *file)
+{
+	return __put_event_file(file, false);
+}
+EXPORT_SYMBOL_GPL(put_event_file_nolock);
+
 #ifdef CONFIG_DYNAMIC_FTRACE
 
 /* Avoid typos */

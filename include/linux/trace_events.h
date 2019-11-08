@@ -348,6 +348,16 @@ enum {
 	EVENT_FILE_FL_WAS_ENABLED_BIT,
 };
 
+extern struct trace_event_file *get_event_file(const char *instance,
+					       const char *system,
+					       const char *event);
+extern struct trace_event_file *get_event_file_nolock(const char *instance,
+						      const char *system,
+						      const char *event);
+
+extern void put_event_file(struct trace_event_file *file);
+extern void put_event_file_nolock(struct trace_event_file *file);
+
 /*
  * Event file flags:
  *  ENABLED	  - The event is enabled
