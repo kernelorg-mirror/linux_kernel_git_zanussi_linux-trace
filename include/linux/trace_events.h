@@ -358,7 +358,28 @@ extern struct trace_event_file *get_event_file_nolock(const char *instance,
 extern void put_event_file(struct trace_event_file *file);
 extern void put_event_file_nolock(struct trace_event_file *file);
 
+struct synth_field_desc {
+	const char *type;
+	const char *name;
+};
+
+struct synth_event;
+
+extern int create_synth_event(const char *name,
+			      struct synth_field_desc *fields,
+			      unsigned int n_fields,
+			      struct module *mod);
+extern void free_synth_event(struct synth_event *event);
 extern int delete_synth_event(const char *name);
+
+extern struct synth_event *create_empty_synth_event(const char *name,
+						    struct module *mod);
+extern int add_synth_field(struct synth_event *event, const char *field_type,
+			   const char *field_name);
+extern int add_synth_fields(struct synth_event *event,
+			    struct synth_field_desc *fields,
+			    unsigned int n_fields);
+extern int finalize_synth_event(struct synth_event *event);
 
 /*
  * Event file flags:

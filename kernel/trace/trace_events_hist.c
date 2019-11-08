@@ -407,6 +407,7 @@ struct synth_event {
 	struct trace_event_class		class;
 	struct trace_event_call			call;
 	struct tracepoint			*tp;
+	struct module				*mod;
 };
 
 static bool is_synth_event(struct dyn_event *ev)
@@ -1198,7 +1199,7 @@ static int unregister_synth_event(struct synth_event *event)
 	return ret;
 }
 
-static void free_synth_event(struct synth_event *event)
+void free_synth_event(struct synth_event *event)
 {
 	unsigned int i;
 
@@ -1215,6 +1216,7 @@ static void free_synth_event(struct synth_event *event)
 	free_synth_event_print_fmt(&event->call);
 	kfree(event);
 }
+EXPORT_SYMBOL(free_synth_event);
 
 static struct synth_event *alloc_synth_event(const char *name, int n_fields,
 					     struct synth_field **fields)
@@ -1266,6 +1268,278 @@ struct hist_var_data {
 	struct list_head list;
 	struct hist_trigger_data *hist_data;
 };
+
+/**
+ * finalize_synth_event - Finalize and register a new synth event
+ * @event: A pointer to the synth_event struct representing the new event
+ *
+ * Register a new synth event only if an event with the same name
+ * doesn't already exist.
+ *
+ * Return: 0 on success, ERR otherwise.
+ */
+int finalize_synth_event(struct synth_event *event)
+{
+	int ret;
+
+	mutex_lock(&event_mutex);
+
+	if (find_synth_event(event->name)) {
+		ret = -EEXIST;
+		goto out;
+	}
+
+	ret = register_synth_event(event);
+	if (!ret)
+		ret = dyn_event_add(&event->devent);
+ out:
+	mutex_unlock(&event_mutex);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(finalize_synth_event);
+
+static int update_fields(struct synth_event *event, struct synth_field *field)
+{
+	struct synth_field **old_fields;
+	unsigned int i, n_fields;
+
+	old_fields = event->fields;
+
+	n_fields = event->n_fields + 1;
+
+	event->fields = kcalloc(n_fields, sizeof(*event->fields), GFP_KERNEL);
+	if (!event->fields)
+		return -ENOMEM;
+
+	/* if field_name contains [n] it's an array */
+	for (i = 0; i < n_fields - 1; i++)
+		event->fields[i] = old_fields[i];
+
+	event->fields[n_fields - 1] = field;
+
+	event->n_fields = n_fields;
+
+	return 0;
+}
+
+/**
+ * add_synth_field - Add a new field to a synthetic event
+ * @event: A pointer to the synth_event struct representing the new event
+ * @field_type: The type of the new field to add
+ * @field_name: The name of the new field to add
+ *
+ * Add a new field to a synthetic event object.  Field ordering is in
+ * the same order the fields are added.
+ *
+ * See synth_field_size() for available types. If field_name contains
+ * [n] the field is considered to be an array.
+ *
+ * Return: 0 if successful, error otherwise.
+ */
+int add_synth_field(struct synth_event *event, const char *field_type,
+		    const char *field_name)
+{
+	struct synth_field *field;
+	const char *array;
+	int len, ret = 0;
+
+	field = kzalloc(sizeof(*field), GFP_KERNEL);
+	if (!field)
+		return -ENOMEM;
+
+	len = strlen(field_name);
+	array = strchr(field_name, '[');
+	if (array)
+		len -= strlen(array);
+
+	field->name = kmemdup_nul(field_name, len, GFP_KERNEL);
+	if (!field->name) {
+		ret = -ENOMEM;
+		goto free;
+	}
+
+	len = strlen(field_type) + 1;
+	if (array)
+		len += strlen(array);
+
+	field->type = kzalloc(len, GFP_KERNEL);
+	if (!field->type) {
+		ret = -ENOMEM;
+		goto free;
+	}
+
+	strcat(field->type, field_type);
+	if (array)
+		strcat(field->type, array);
+
+	field->size = synth_field_size(field->type);
+	if (!field->size) {
+		ret = -EINVAL;
+		goto free;
+	}
+
+	if (synth_field_is_string(field->type))
+		field->is_string = true;
+
+	field->is_signed = synth_field_signed(field->type);
+
+	ret = update_fields(event, field);
+ out:
+	return ret;
+ free:
+	free_synth_field(field);
+	goto out;
+}
+EXPORT_SYMBOL_GPL(add_synth_field);
+
+/**
+ * add_synth_fields - Add a new field to a synthetic event
+ * @event: A pointer to the synth_event struct representing the new event
+ * @fields: An array of type/name field descriptions
+ * @n_fields: The number of field descriptions contained in the fields array
+ *
+ * Add a new set of fields to a synthetic event object.  The event
+ * fields that will be defined for the event should be passed in as an
+ * array of struct synth_field_desc, and the number of elements in the
+ * array passed in as n_fields.  Field ordering will retain the
+ * ordering given in the fields array.
+ *
+ * See synth_field_size() for available types. If field_name contains
+ * [n] the field is considered to be an array.
+ *
+ * Return: 0 if successful, error otherwise.
+ */
+int add_synth_fields(struct synth_event *event,
+		     struct synth_field_desc *fields, unsigned int n_fields)
+{
+	unsigned int i;
+	int ret = 0;
+
+	for (i = 0; i < n_fields; i++) {
+		if (fields[i].type == NULL || fields[i].name == NULL) {
+			ret = -EINVAL;
+			break;
+		}
+
+		ret = add_synth_field(event, fields[i].type, fields[i].name);
+		if (ret)
+			break;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(add_synth_fields);
+
+/**
+ * create_empty_synth_event - Create a synth event to be populated with fields
+ * @name: The name of the synthetic event to create
+ * @mod: The module creating the event, NULL if not created from a module
+ *
+ * Allocate and initialize a new synth_event struct for a new
+ * synthetic event.
+ *
+ * The new synthetic event should be populated with fields using one
+ * or more calls to add_synth_field() or add_synth_fields() and then
+ * finalized and registered using finalize_synth_event().
+ *
+ * If the new synthetic event is being created from a module, the mod
+ * param must be non-NULL.  This will ensure that the trace buffer
+ * won't contain unreadable events.
+ *
+ * The new synth event should be deleted using delete_synth_event() if
+ * registration was successful using finalize_synth_event().  If not,
+ * free_synth_event() should be used.
+ *
+ * Return: A pointer to the synth_event struct representing the new
+ *         synth event, ERR_PTR otherwise.
+ */
+struct synth_event *create_empty_synth_event(const char *name,
+					     struct module *mod)
+{
+	struct synth_event *event;
+
+	event = kzalloc(sizeof(*event), GFP_KERNEL);
+	if (!event) {
+		event = ERR_PTR(-ENOMEM);
+		goto out;
+	}
+
+	event->name = kstrdup(name, GFP_KERNEL);
+	if (!event->name) {
+		kfree(event);
+		event = ERR_PTR(-ENOMEM);
+		goto out;
+	}
+
+	event->mod = mod;
+
+	dyn_event_init(&event->devent, &synth_event_ops);
+ out:
+	return event;
+}
+EXPORT_SYMBOL_GPL(create_empty_synth_event);
+
+/**
+ * create_synth_event - Create a new synthetic event
+ * @name: The name of the new sythetic event
+ * @fields: An array of type/name field descriptions
+ * @n_fields: The number of field descriptions contained in the fields array
+ * @mod: The module creating the event, NULL if not created from a module
+ *
+ * Create a new synthetic event with the given name under the
+ * trace/events/synthetic/ directory.  The event fields that will be
+ * defined for the event should be passed in as an array of struct
+ * synth_field_desc, and the number elements in the array passed in as
+ * n_fields. Field ordering will retain the ordering given in the
+ * fields array.
+ *
+ * If the new synthetic event is being created from a module, the mod
+ * param must be non-NULL.  This will ensure that the trace buffer
+ * won't contain unreadable events.
+ *
+ * The new synth event should be deleted using delete_synth_event()
+ * function.  The new synthetic event can be generated from modules or
+ * other kernel code using generate_synth_event().
+ *
+ * Return: 0 if successful, error otherwise.
+ */
+int create_synth_event(const char *name, struct synth_field_desc *fields,
+		       unsigned int n_fields, struct module *mod)
+{
+	struct synth_event *se;
+	int ret = -EINVAL;
+	unsigned int i;
+
+	if (n_fields > SYNTH_FIELDS_MAX)
+		return ret;
+
+	se = create_empty_synth_event(name, mod);
+	if (IS_ERR(se))
+		return PTR_ERR(se);
+
+	for (i = 0; i < n_fields; i++) {
+		if (fields[i].type == NULL || fields[i].name == NULL) {
+			ret = -EINVAL;
+			goto free;
+		}
+
+		ret = add_synth_field(se, fields[i].type, fields[i].name);
+		if (ret)
+			goto free;
+	}
+
+	ret = finalize_synth_event(se);
+	if (ret)
+		goto free;
+ out:
+	return ret;
+ free:
+	free_synth_event(se);
+
+	goto out;
+}
+EXPORT_SYMBOL_GPL(create_synth_event);
 
 static int __create_synth_event(int argc, const char *name, const char **argv)
 {
@@ -1363,13 +1637,32 @@ static int destroy_synth_event(struct synth_event *se)
 int delete_synth_event(const char *event_name)
 {
 	struct synth_event *se = NULL;
+	struct module *mod = NULL;
 	int ret = -ENOENT;
 
 	mutex_lock(&event_mutex);
 	se = find_synth_event(event_name);
-	if (se)
+	if (se) {
+		mod = se->mod;
 		ret = destroy_synth_event(se);
+	}
 	mutex_unlock(&event_mutex);
+
+	if (mod) {
+		mutex_lock(&trace_types_lock);
+		/*
+		 * It is safest to reset the ring buffer if the module
+		 * being unloaded registered any events that were
+		 * used. The only worry is if a new module gets
+		 * loaded, and takes on the same id as the events of
+		 * this module. When printing out the buffer, traced
+		 * events left over from this module may be passed to
+		 * the new module events and unexpected results may
+		 * occur.
+		 */
+		tracing_reset_all_online_cpus();
+		mutex_unlock(&trace_types_lock);
+	}
 
 	return ret;
 }
