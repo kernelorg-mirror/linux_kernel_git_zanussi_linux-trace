@@ -1877,6 +1877,40 @@ static inline bool event_command_needs_rec(struct event_command *cmd_ops)
 
 extern int trace_event_enable_disable(struct trace_event_file *file,
 				      int enable, int soft_disable);
+
+extern void dynevent_cmd_init(struct dynevent_cmd *cmd, char *buf, int maxlen,
+			      enum dynevent_type type,
+			      dynevent_create_fn_t run_command);
+
+typedef int (*dynevent_check_arg_fn_t)(void *data);
+
+struct dynevent_arg {
+	const char		*str;
+	char			separator; /* e.g. ';', ',', or nothing */
+	dynevent_check_arg_fn_t	check_arg;
+};
+
+extern void dynevent_arg_init(struct dynevent_arg *arg,
+			      dynevent_check_arg_fn_t check_arg,
+			      char separator);
+extern int dynevent_arg_add(struct dynevent_cmd *cmd,
+			    struct dynevent_arg *arg);
+
+struct dynevent_arg_pair {
+	const char		*lhs;
+	const char		*rhs;
+	char			operator; /* e.g. '=' or nothing */
+	char			separator; /* e.g. ';', ',', or nothing */
+	dynevent_check_arg_fn_t	check_arg;
+};
+
+extern void dynevent_arg_pair_init(struct dynevent_arg_pair *arg_pair,
+				   dynevent_check_arg_fn_t check_arg,
+				   char operator, char separator);
+extern int dynevent_arg_pair_add(struct dynevent_cmd *cmd,
+				 struct dynevent_arg_pair *arg_pair);
+extern int dynevent_str_add(struct dynevent_cmd *cmd, const char *str);
+
 extern int tracing_alloc_snapshot(void);
 extern void tracing_snapshot_cond(struct trace_array *tr, void *cond_data);
 extern int tracing_snapshot_cond_enable(struct trace_array *tr, void *cond_data, cond_update_fn_t update);
