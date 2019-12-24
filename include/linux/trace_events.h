@@ -353,6 +353,60 @@ extern struct trace_event_file *get_event_file(const char *instance,
 					       const char *event);
 extern void put_event_file(struct trace_event_file *file);
 
+struct dynevent_cmd;
+
+typedef int (*dynevent_check_arg_fn_t)(void *data);
+typedef int (*dynevent_create_fn_t)(struct dynevent_cmd *cmd);
+
+struct dynevent_arg {
+	const char		*str;
+	char			separator; /* e.g. ';', ',', or nothing */
+	dynevent_check_arg_fn_t	check_arg;
+};
+
+extern void dynevent_arg_init(struct dynevent_arg *arg,
+			      dynevent_check_arg_fn_t check_arg,
+			      char separator);
+extern int add_dynevent_arg(struct dynevent_cmd *cmd,
+			    struct dynevent_arg *arg);
+
+struct dynevent_arg_pair {
+	const char		*lhs;
+	const char		*rhs;
+	char			operator; /* e.g. '=' or nothing */
+	char			separator; /* e.g. ';', ',', or nothing */
+	dynevent_check_arg_fn_t	check_arg;
+};
+
+extern void dynevent_arg_pair_init(struct dynevent_arg_pair *arg_pair,
+				   dynevent_check_arg_fn_t check_arg,
+				   char operator, char separator);
+extern int add_dynevent_arg_pair(struct dynevent_cmd *cmd,
+				 struct dynevent_arg_pair *arg_pair);
+
+#define MAX_DYNEVENT_CMD_LEN	(2048)
+
+enum dynevent_type {
+	DYNEVENT_TYPE_SYNTH,
+	DYNEVENT_TYPE_KPROBE,
+};
+
+struct dynevent_cmd {
+	char			*buf;
+	const char		*event_name;
+	int			maxlen;
+	int			remaining;
+	unsigned int		n_fields;
+	enum dynevent_type	type;
+	dynevent_create_fn_t	run_command;
+	void			*private_data;
+};
+
+extern void dynevent_cmd_init(struct dynevent_cmd *cmd, char *buf, int maxlen,
+			      enum dynevent_type type,
+			      dynevent_create_fn_t run_command);
+extern int create_dynevent(struct dynevent_cmd *cmd);
+
 extern int delete_synth_event(const char *name);
 
 /*
