@@ -464,6 +464,24 @@ extern int add_synth_val(const char *field_name, u64 val,
 			 struct synth_gen_state *gen_state);
 extern int trace_synth_event_end(struct synth_gen_state *gen_state);
 
+extern void kprobe_dynevent_cmd_init(struct dynevent_cmd *cmd,
+				     char *buf, int maxlen);
+
+#define gen_kprobe_cmd(cmd, name, loc, ...)		\
+	__gen_kprobe_cmd(cmd, name, loc, false, ## __VA_ARGS__, NULL)
+
+#define gen_kretprobe_cmd(cmd, name, loc, ...)		\
+	__gen_kprobe_cmd(cmd, name, loc, true, ## __VA_ARGS__, NULL)
+
+extern int __gen_kprobe_cmd(struct dynevent_cmd *cmd, const char *name,
+			    const char *loc, bool kretprobe, ...);
+
+#define add_probe_fields(cmd, ...)	\
+	__add_probe_fields(cmd, ## __VA_ARGS__, NULL)
+
+extern int __add_probe_fields(struct dynevent_cmd *cmd, ...);
+extern int delete_kprobe_event(const char *name);
+
 /*
  * Event file flags:
  *  ENABLED	  - The event is enabled
