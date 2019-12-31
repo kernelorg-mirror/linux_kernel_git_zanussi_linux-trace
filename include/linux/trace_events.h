@@ -409,6 +409,36 @@ extern int create_dynevent(struct dynevent_cmd *cmd);
 
 extern int delete_synth_event(const char *name);
 
+extern void synth_dynevent_cmd_init(struct dynevent_cmd *cmd,
+				    char *buf, int maxlen);
+
+extern int __gen_synth_cmd(struct dynevent_cmd *cmd, const char *name,
+			   struct module *mod, ...);
+
+#define gen_synth_cmd(cmd, name, mod, ...)	\
+	__gen_synth_cmd(cmd, name, mod, ## __VA_ARGS__, NULL)
+
+struct synth_field_desc {
+	const char *type;
+	const char *name;
+};
+
+extern int gen_synth_cmd_array(struct dynevent_cmd *cmd, const char *name,
+			       struct module *mod,
+			       struct synth_field_desc *fields,
+			       unsigned int n_fields);
+extern int create_synth_event(const char *name,
+			      struct synth_field_desc *fields,
+			      unsigned int n_fields, struct module *mod);
+
+
+extern int add_synth_field(struct dynevent_cmd *cmd,
+			   const char *type,
+			   const char *name);
+extern int add_synth_fields(struct dynevent_cmd *cmd,
+			    struct synth_field_desc *fields,
+			    unsigned int n_fields);
+
 /*
  * Event file flags:
  *  ENABLED	  - The event is enabled
