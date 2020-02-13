@@ -1885,6 +1885,9 @@ int synth_event_trace(struct trace_event_file *file, unsigned int n_vals, ...)
 		return ret;
 	}
 
+	if (n_vals != state.event->n_fields)
+		return -EINVAL;
+
 	va_start(args, n_vals);
 	for (i = 0, n_u64 = 0; i < state.event->n_fields; i++) {
 		u64 val;
@@ -1959,6 +1962,9 @@ int synth_event_trace_array(struct trace_event_file *file, u64 *vals,
 			ret = 0; /* just disabled, not really an error */
 		return ret;
 	}
+
+	if (n_vals != state.event->n_fields)
+		return -EINVAL;
 
 	for (i = 0, n_u64 = 0; i < state.event->n_fields; i++) {
 		if (state.event->fields[i]->is_string) {
