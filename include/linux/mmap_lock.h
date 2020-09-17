@@ -1,10 +1,34 @@
 #ifndef _LINUX_MMAP_LOCK_H
 #define _LINUX_MMAP_LOCK_H
 
+#include <linux/lockdep.h>
+#include <linux/mm_types.h>
 #include <linux/mmdebug.h>
+#include <linux/rwsem.h>
+#include <linux/types.h>
 
 #define MMAP_LOCK_INITIALIZER(name) \
 	.mmap_lock = __RWSEM_INITIALIZER((name).mmap_lock),
+
+#ifdef CONFIG_MMAP_LOCK_STATS
+
+void mmap_init_lock(struct mm_struct *mm);
+void mmap_write_lock(struct mm_struct *mm);
+void mmap_write_lock_nested(struct mm_struct *mm, int subclass);
+int mmap_write_lock_killable(struct mm_struct *mm);
+bool mmap_write_trylock(struct mm_struct *mm);
+void mmap_write_unlock(struct mm_struct *mm);
+void mmap_write_downgrade(struct mm_struct *mm);
+void mmap_read_lock(struct mm_struct *mm);
+int mmap_read_lock_killable(struct mm_struct *mm);
+bool mmap_read_trylock(struct mm_struct *mm);
+void mmap_read_unlock(struct mm_struct *mm);
+bool mmap_read_trylock_non_owner(struct mm_struct *mm);
+void mmap_read_unlock_non_owner(struct mm_struct *mm);
+void mmap_assert_locked(struct mm_struct *mm);
+void mmap_assert_write_locked(struct mm_struct *mm);
+
+#else /* !CONFIG_MMAP_LOCK_STATS */
 
 static inline void mmap_init_lock(struct mm_struct *mm)
 {
@@ -63,7 +87,7 @@ static inline void mmap_read_unlock(struct mm_struct *mm)
 
 static inline bool mmap_read_trylock_non_owner(struct mm_struct *mm)
 {
-	if (down_read_trylock(&mm->mmap_lock)) {
+	if (mmap_read_trylock(mm)) {
 		rwsem_release(&mm->mmap_lock.dep_map, _RET_IP_);
 		return true;
 	}
@@ -86,5 +110,7 @@ static inline void mmap_assert_write_locked(struct mm_struct *mm)
 	lockdep_assert_held_write(&mm->mmap_lock);
 	VM_BUG_ON_MM(!rwsem_is_locked(&mm->mmap_lock), mm);
 }
+
+#endif /* CONFIG_MMAP_LOCK_STATS */
 
 #endif /* _LINUX_MMAP_LOCK_H */
