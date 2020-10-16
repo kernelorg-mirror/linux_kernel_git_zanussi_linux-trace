@@ -28,8 +28,7 @@
 	C(TOO_MANY_FIELDS,	"Too many fields"),		\
 	C(INCOMPLETE_TYPE,	"Incomplete type"),		\
 	C(INVALID_TYPE,		"Invalid type"),		\
-	C(INVALID_FIELD,	"Invalid field"),		\
-	C(CMD_TOO_LONG,		"Command too long"),
+	C(INVALID_ARRAY_SPEC,	"Invalid array specification"),
 
 #undef C
 #define C(a, b)		SYNTH_ERR_##a
@@ -643,6 +642,10 @@ static struct synth_field *parse_synth_field(int argc, const char **argv,
 	size = synth_field_size(field->type);
 	if (size < 0) {
 		synth_err(SYNTH_ERR_INVALID_TYPE, errpos(field_type));
+		if (array)
+			synth_err(SYNTH_ERR_INVALID_ARRAY_SPEC, errpos(field_name));
+		else
+			synth_err(SYNTH_ERR_INVALID_TYPE, errpos(field_type));
 		ret = -EINVAL;
 		goto free;
 	} else if (size == 0) {
@@ -1191,7 +1194,7 @@ static int __create_synth_event(int argc, const char *name, const char **argv)
 	}
 
 	if (i < argc) {
-		synth_err(SYNTH_ERR_INVALID_FIELD, errpos(argv[i]));
+		synth_err(SYNTH_ERR_CMD_INCOMPLETE, errpos(argv[i]));
 		ret = -EINVAL;
 		goto err;
 	}
