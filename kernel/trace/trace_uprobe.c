@@ -716,7 +716,8 @@ fail_address_parse:
 	return ret;
 }
 
-static int create_or_delete_trace_uprobe(int argc, char **argv)
+static int create_or_delete_trace_uprobe(int argc, char **argv,
+					 const char *raw_cmd)
 {
 	int ret;
 
@@ -793,7 +794,7 @@ static ssize_t probes_write(struct file *file, const char __user *buffer,
 			    size_t count, loff_t *ppos)
 {
 	return trace_parse_run_command(file, buffer, count, ppos,
-					create_or_delete_trace_uprobe);
+				       create_or_delete_trace_uprobe, 0);
 }
 
 static const struct file_operations uprobe_events_ops = {

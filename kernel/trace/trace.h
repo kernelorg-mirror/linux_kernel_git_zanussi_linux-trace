@@ -1982,10 +1982,16 @@ extern int tracing_set_cpumask(struct trace_array *tr,
 
 #define MAX_EVENT_NAME_LEN	64
 
-extern int trace_run_command(const char *buf, int (*createfn)(int, char**));
+extern int trace_run_command(const char *buf,
+			     int (*createfn)(int, char **, const char *));
+extern int trace_run_command_add_sep(const char *buf,
+				     int (*createfn)(int, char **, const char *),
+				     char additional_sep);
 extern ssize_t trace_parse_run_command(struct file *file,
-		const char __user *buffer, size_t count, loff_t *ppos,
-		int (*createfn)(int, char**));
+				       const char __user *buffer,
+				       size_t count, loff_t *ppos,
+				       int (*createfn)(int, char **, const char *),
+				       char additional_sep);
 
 extern unsigned int err_pos(char *cmd, const char *str);
 extern void tracing_log_err(struct trace_array *tr,

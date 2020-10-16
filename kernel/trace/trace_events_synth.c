@@ -1378,7 +1378,8 @@ int synth_event_delete(const char *event_name)
 }
 EXPORT_SYMBOL_GPL(synth_event_delete);
 
-static int create_or_delete_synth_event(int argc, char **argv)
+static int create_or_delete_synth_event(int argc, char **argv,
+					const char *raw_cmd)
 {
 	const char *name = argv[0];
 	int ret;
@@ -2046,7 +2047,7 @@ static ssize_t synth_events_write(struct file *file,
 				  size_t count, loff_t *ppos)
 {
 	return trace_parse_run_command(file, buffer, count, ppos,
-				       create_or_delete_synth_event);
+				       create_or_delete_synth_event, ';');
 }
 
 static const struct file_operations synth_events_fops = {

@@ -9367,30 +9367,56 @@ void ftrace_dump(enum ftrace_dump_mode oops_dump_mode)
 }
 EXPORT_SYMBOL_GPL(ftrace_dump);
 
-int trace_run_command(const char *buf, int (*createfn)(int, char **))
+static int __trace_run_command(const char *buf,
+			       int (*createfn)(int, char **, const char *),
+			       char additional_sep)
 {
-	char **argv;
 	int argc, ret;
+	char **argv, *cmd;
+
+	cmd = kstrdup(buf, GFP_KERNEL);
+	if (!cmd)
+		return -ENOMEM;
+
+	if (additional_sep)
+		strreplace(cmd, additional_sep, ' ');
 
 	argc = 0;
 	ret = 0;
-	argv = argv_split(GFP_KERNEL, buf, &argc);
-	if (!argv)
+	argv = argv_split(GFP_KERNEL, cmd, &argc);
+	if (!argv) {
+		kfree(cmd);
 		return -ENOMEM;
+	}
 
 	if (argc)
-		ret = createfn(argc, argv);
+		ret = createfn(argc, argv, buf);
 
 	argv_free(argv);
+	kfree(cmd);
 
 	return ret;
+}
+
+int trace_run_command(const char *buf, int (*createfn)(int, char **,
+						       const char *))
+{
+	return __trace_run_command(buf, createfn, 0);
+}
+
+int trace_run_command_add_sep(const char *buf,
+			      int (*createfn)(int, char **, const char *),
+			      char additional_sep)
+{
+	return __trace_run_command(buf, createfn, additional_sep);
 }
 
 #define WRITE_BUFSIZE  4096
 
 ssize_t trace_parse_run_command(struct file *file, const char __user *buffer,
 				size_t count, loff_t *ppos,
-				int (*createfn)(int, char **))
+				int (*createfn)(int, char **, const char *),
+				char additional_sep)
 {
 	char *kbuf, *buf, *tmp;
 	int ret = 0;
@@ -9438,7 +9464,8 @@ ssize_t trace_parse_run_command(struct file *file, const char __user *buffer,
 			if (tmp)
 				*tmp = '\0';
 
-			ret = trace_run_command(buf, createfn);
+			ret = trace_run_command_add_sep(buf, createfn,
+							additional_sep);
 			if (ret)
 				goto out;
 			buf += size;

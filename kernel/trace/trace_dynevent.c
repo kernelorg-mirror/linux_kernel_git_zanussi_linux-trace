@@ -75,7 +75,7 @@ int dyn_event_release(int argc, char **argv, struct dyn_event_operations *type)
 	return ret;
 }
 
-static int create_dyn_event(int argc, char **argv)
+static int create_dyn_event(int argc, char **argv, const char *raw_cmd)
 {
 	struct dyn_event_operations *ops;
 	int ret = -ENODEV;
@@ -191,7 +191,7 @@ static ssize_t dyn_event_write(struct file *file, const char __user *buffer,
 				size_t count, loff_t *ppos)
 {
 	return trace_parse_run_command(file, buffer, count, ppos,
-				       create_dyn_event);
+				       create_dyn_event, ';');
 }
 
 static const struct file_operations dynamic_events_ops = {
