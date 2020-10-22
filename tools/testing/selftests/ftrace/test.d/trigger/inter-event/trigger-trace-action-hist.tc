@@ -10,7 +10,7 @@ fail() { #msg
 
 echo "Test create synthetic event"
 
-echo 'wakeup_latency  u64 lat pid_t pid char comm[16]' > synthetic_events
+echo 'wakeup_latency  u64 lat; pid_t pid; char comm[16]' > synthetic_events
 if [ ! -d events/synthetic/wakeup_latency ]; then
     fail "Failed to create wakeup_latency synthetic event"
 fi
