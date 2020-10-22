@@ -10,7 +10,7 @@ fail() { #msg
 
 echo "Test create synthetic event"
 
-echo 'waking_latency  u64 lat pid_t pid' > synthetic_events
+echo 'waking_latency  u64 lat; pid_t pid' > synthetic_events
 if [ ! -d events/synthetic/waking_latency ]; then
     fail "Failed to create waking_latency synthetic event"
 fi
@@ -21,7 +21,7 @@ echo 'hist:keys=pid:ts0=common_timestamp.usecs if comm=="ping"' > events/sched/s
 echo 'hist:keys=pid:waking_lat=common_timestamp.usecs-$ts0:onmatch(sched.sched_waking).waking_latency($waking_lat,pid) if comm=="ping"' > events/sched/sched_wakeup/trigger
 echo 'hist:keys=pid,lat:sort=pid,lat' > events/synthetic/waking_latency/trigger
 
-echo 'wakeup_latency u64 lat pid_t pid' >> synthetic_events
+echo 'wakeup_latency u64 lat; pid_t pid' >> synthetic_events
 echo 'hist:keys=pid:ts1=common_timestamp.usecs if comm=="ping"' >> events/sched/sched_wakeup/trigger
 echo 'hist:keys=next_pid:wakeup_lat=common_timestamp.usecs-$ts1:onmatch(sched.sched_wakeup).wakeup_latency($wakeup_lat,next_pid) if next_comm=="ping"' > events/sched/sched_switch/trigger
 
