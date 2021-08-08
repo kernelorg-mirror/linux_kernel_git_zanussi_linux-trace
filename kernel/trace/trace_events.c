@@ -2432,6 +2432,8 @@ event_create_dir(struct dentry *parent, struct trace_event_file *file)
 #ifdef CONFIG_HIST_TRIGGERS
 	trace_create_file("hist", 0444, file->dir, file,
 			  &event_hist_fops);
+	trace_create_file("hist_json", 0444, file->dir, file,
+			  &event_hist_json_fops);
 #endif
 #ifdef CONFIG_HIST_TRIGGERS_DEBUG
 	trace_create_file("hist_debug", 0444, file->dir, file,
