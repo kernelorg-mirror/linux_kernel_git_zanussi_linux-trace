@@ -621,6 +621,142 @@ static void unregister_trigger(char *glob, struct event_trigger_ops *ops,
 		data->ops->free(data->ops, data);
 }
 
+int event_trigger_check(char *glob, char **trigger, char **param,
+			bool *remove, bool require_param, bool separate_trigger)
+{
+	int ret = 0;
+
+	*remove = (glob && glob[0] == '!') ? true : false;
+
+	if (!*param) {
+		if (require_param)
+			ret = -EINVAL;
+		goto out;
+	}
+
+	/* the only optional param recognized is n, ignore anything else */
+	if (*param && (!require_param) && (!isdigit(*param[0])))
+		goto out;
+
+	if (!separate_trigger) /* some callers may customize this */
+		goto out;
+
+	/* separate the trigger from the filter (trigger [if filter]) */
+	*trigger = strsep(param, " \t");
+	if (!*trigger) {
+		ret = -EINVAL;
+		goto out;
+	}
+	if (*param) {
+		*param = skip_spaces(*param);
+		if (!**param)
+			*param = NULL;
+	}
+out:
+	return ret;
+}
+
+struct event_trigger_data *event_trigger_alloc(struct event_command *cmd_ops,
+					       char *trigger,
+					       char *cmd,
+					       void *private_data)
+{
+	struct event_trigger_data *trigger_data;
+	struct event_trigger_ops *trigger_ops;
+
+	trigger_ops = cmd_ops->get_trigger_ops(cmd, trigger);
+
+	trigger_data = kzalloc(sizeof(*trigger_data), GFP_KERNEL);
+	if (!trigger_data)
+		return NULL;
+
+	trigger_data->count = -1;
+	trigger_data->ops = trigger_ops;
+	trigger_data->cmd_ops = cmd_ops;
+	trigger_data->private_data = private_data;
+
+	INIT_LIST_HEAD(&trigger_data->list);
+	INIT_LIST_HEAD(&trigger_data->named_list);
+	RCU_INIT_POINTER(trigger_data->filter, NULL);
+
+	return trigger_data;
+}
+
+int event_trigger_parse_num(char *trigger,
+			    struct event_trigger_data *trigger_data)
+{
+	char *number;
+	int ret = 0;
+
+	if (trigger) {
+		number = strsep(&trigger, ":");
+
+		if (!strlen(number))
+			return -EINVAL;
+
+		/*
+		 * We use the callback data field (which is a pointer)
+		 * as our counter.
+		 */
+		ret = kstrtoul(number, 0, &trigger_data->count);
+	}
+
+	return ret;
+}
+
+int event_trigger_set_filter(struct event_command *cmd_ops,
+			     struct trace_event_file *file,
+			     char *param,
+			     struct event_trigger_data *trigger_data)
+{
+	if (param && cmd_ops->set_filter)
+		return cmd_ops->set_filter(param, trigger_data, file);
+
+	return 0;
+}
+
+void event_trigger_reset_filter(struct event_command *cmd_ops,
+				struct event_trigger_data *trigger_data)
+{
+	if (cmd_ops->set_filter)
+		cmd_ops->set_filter(NULL, trigger_data, NULL);
+}
+
+int event_trigger_register(struct event_command *cmd_ops,
+			   struct trace_event_file *file,
+			   char *glob,
+			   char *cmd,
+			   char *trigger,
+			   struct event_trigger_data *trigger_data,
+			   int *n_registered)
+{
+	struct event_trigger_ops *trigger_ops;
+	int ret;
+
+	if (n_registered)
+		*n_registered = 0;
+
+	trigger_ops = cmd_ops->get_trigger_ops(cmd, trigger);
+
+	ret = cmd_ops->reg(glob, trigger_ops, trigger_data, file);
+	/*
+	 * The above returns on success the # of functions enabled,
+	 * but if it didn't find any functions it returns zero.
+	 * Consider no functions a failure too.
+	 */
+	if (!ret) {
+		cmd_ops->unreg(glob, trigger_ops, trigger_data, file);
+		ret = -ENOENT;
+	} else if (ret > 0) {
+		if (n_registered)
+			*n_registered = ret;
+		/* Just return zero, not the number of enabled functions */
+		ret = 0;
+	}
+
+	return ret;
+}
+
 /**
  * event_trigger_callback - Generic event_command @func implementation
  * @cmd_ops: The command ops, used for trigger registration
